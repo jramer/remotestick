@@ -38,7 +38,7 @@ TELLSTICK_DIM = 16
 TELLSTICK_LEARN = 32
 ALL_METHODS = TELLSTICK_TURNON | TELLSTICK_TURNOFF | TELLSTICK_BELL | TELLSTICK_TOGGLE | TELLSTICK_DIM | TELLSTICK_LEARN
 
-reqauth = True
+reqauth = False
 username = None
 password = None
 libtelldus = None
@@ -379,6 +379,14 @@ def static(file):
     if not disable_static:
         return static_file(file, root=static_folder) 
 
+@route('/static/:path#.+#', name='static')
+def static(path):
+    return static_file(path, root='static')
+
+@route('/')
+def index():
+    return { 'get_url': get_url }
+
 def usage():
     print "Usage: remotestick-server [OPTION] ..."
     print "Expose tellstick interfaces through RESTful services."
@@ -458,5 +466,6 @@ def main():
     else:
         run(host=host, port=port)
              
-if __name__ == "__main__":
-    main()
+#if __name__ == "__main__":
+#    main()
+lib, libname = loadlibrary(None)

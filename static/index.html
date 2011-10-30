@@ -1,0 +1,362 @@
+<html>
+    <head>
+        <title>Remotestick</title>
+        <meta name="viewport" content="width=device-width, user-scalable=no" />
+        <script type="text/javascript" src="static/jquery-1.4.4.min.js" charset="utf-8"></script>
+        <script src="static/microtemplates.js">
+        </script>
+        <script src="static/theme/js/jquery-ui-1.8.7.custom.min.js">
+        </script>
+        <script type="text/javascript">
+            var jseaHost = (("https:" == document.location.protocol) ? "https://" : "http://");
+            document.write(unescape("%3Cscript src='" + jseaHost + "js-e-a.appspot.com/js/monitor.js' type='text/javascript'%3E%3C/script%3E"));
+        </script>
+        <script type="text/javascript">
+            window.JSAMonitor = new JSEAMonitor({
+                pid: 478001,
+                useGlobalErrorEvent: true,
+                useJQuery: true
+            });
+        </script>
+        <link REL="StyleSheet" type="text/css" href="static/theme/css/dark-hive/jquery-ui-1.8.7.custom.css">
+        </link>
+        <link REL="StyleSheet" type="text/css" href="static/style.css">
+        </link>
+        <script type="text/html" id="device_list_template">
+            <div class="device-list-border">
+                <div class="device-list-description">
+                    <%=obj.description %>
+                </div>
+                <div class="device-list-controls">
+                    <div class="onOff">
+                        <div id="radio<%=obj.id%>">
+                            <input type="radio" id="off<%=obj.id%>" name="radio<%=obj.id%>"<% if(obj.last_command != "ON") { %> checked="checked"<%} %>onclick="turnOff(<%=obj.id %>);"/>
+                            <label for="off<%=obj.id%>">
+                                Off
+                            </label>
+                            <input type="radio" id="on<%=obj.id%>" name="radio<%=obj.id%>"<% if(obj.last_command == "ON") { %> checked="checked"<%} %>onclick="turnOn(<%=obj.id %>);"  />
+                            <label for="on<%=obj.id%>">
+                                On
+                            </label>
+                        </div>
+                    </div>
+                    <% if(obj.dimmer) { %>
+                    <div class="slide" id="dim<%=obj.id%>">
+                    </div>
+                    <% } %>
+                    <dir class="clear">
+                    </dir>
+                </div>
+            </div>
+        </script>
+        <script type="text/javascript">
+            function turnOn(id){
+                $.ajax({
+                    url: "../devices/" + id + "/on.xml"
+                });
+            };
+            function turnOff(id){
+                $.ajax({
+                    url: "../devices/" + id + "/off.xml"
+                });
+            };
+            function dim(id, level){
+                $.ajax({
+                    url: "../devices/" + id + "/dim/" + level + ".xml"
+                });
+            };
+            function device(id, description, last_command, dimmer){
+                var self = this;
+                self.description = description;
+                self.id = id;
+                self.last_command = last_command;
+                self.dimmer = dimmer;
+                return self;
+            };
+            
+            function turnAllOn(){
+                $(devices).each(function(index, value){
+                    turnOn(value.id);
+                });
+            };
+            
+            function turnAllOff(){
+                $(devices).each(function(index, value){
+                    turnOff(value.id);
+                });
+            };
+            
+            var devices = new Array();
+            
+            function loadDevices(){
+                var template = window.tmpl("device_list_template");
+                
+                $('#devices').html('');
+                $.ajax({
+                    url: "../devices.xml",
+                    success: function(xml){
+                        $(xml).find('device').each(function(){
+                            var d = $(this);
+                            var id = d.attr("id");
+                            var lastcmd = d.find('lastcmd').text();
+                            var description = d.find('name').text();
+                            var dimmer = false;
+                            d.find('supportedMethod').each(function(){
+                                var m = $(this);
+                                if (m.text() == "TELLSTICK_DIM") {
+                                    dimmer = true;
+                                }
+                            });
+                            
+                            var dev = new device(id, description, lastcmd, dimmer);
+                            devices.push(dev);
+                            var temp = template(dev);
+                            
+                            
+                            $('#devices').append(temp);
+                            $("#radio" + id).buttonset();
+                            $('#dim' + id).slider({
+                                min: 0,
+                                max: 100,
+                                slide: function(event, ui){
+                                    dim(id, ui.value);
+                                },
+                                range: "min"
+                            });
+                            
+                        });
+                        
+                        
+                    }
+                });
+                
+                
+            };
+            
+            function postDevice(device, success){
+                $.post("../devices.xml", device, success);
+            };
+        </script>
+        <script type="text/javascript">
+            function addDevice(){
+                var max = 0;
+                $(devices).each(function(index, value){
+                    if (value > max) 
+                        max = value;
+                });
+                var id = max++;
+                
+                var model = $('#model option:selected').val();
+                var protocol = $('#protocol option:selected').val();
+                var name = $('#name').val();
+                var house = ((model == "codeswitch" || model == "bell") ? $('#house-alpha option:selected').val() : $('#house-numeric').val());
+                var unit = model == "bell" ? null : $("#unitvalue").val();
+                var parameters = ""
+                
+                parameters = "house=" + house;
+                
+                if (unit != null) 
+                    parameters += " unit=" + unit;
+                
+                
+                
+                postDevice({
+                    id: id,
+                    name: name,
+                    protocol: protocol,
+                    model: model,
+                    parameters: parameters
+                }, function(){
+                    $("#addCompleted").dialog({
+                        modal: true,
+                        buttons: {
+                            Ok: function(){
+                                loadDevices();
+                                $(this).dialog("close");
+                            }
+                        }
+                    });
+                });
+            };
+            
+            function updateModel(){
+                var model = $('#model option:selected').val();
+                switch (model) {
+                    case "bell":
+                        $("#unit").hide();
+                        $("#house-alpha").show();
+                        $("#house-numeric").hide();
+                        
+                        break;
+                        
+                    case "codeswitch":
+                        $("#unit").show();
+                        $("#house-alpha").show();
+                        $("#house-numeric").hide();
+                        break;
+                        
+                    default:
+                        $("#unit").show();
+                        $("#house-alpha").hide();
+                        $("#house-numeric").show();
+                        
+                }
+            };
+            
+            $(function(){
+                loadDevices();
+                updateModel();
+                $("#turnAllOff").button();
+                $("#turnAllOff").click(function(){
+                    turnAllOff();
+                });
+                $("#addDevice").button();
+                $("#addDevice").click(function(){
+                    $("#addDialog").dialog({
+                        modal: true,
+                        width: "250pt",
+                        buttons: {
+                            Cancel: function(){
+                                $(this).dialog("close");
+                            },
+                            "Add": function(){
+                                addDevice();
+                                $(this).dialog("close");
+                            }
+                            
+                        }
+                    });
+                });
+                $("#turnAllOn").button();
+                $("#turnAllOn").click(function(){
+                    turnAllOn();
+                });
+                
+                $("#model").change(function(){
+                    updateModel();
+                })
+            });
+        </script>
+        </head>
+        <body class="ui-widget-content">
+            <div id="addCompleted" title="Add Completed" class="dialog">
+                <P>
+                    Your devices has been added.
+                </P>
+                <P>
+                    In the case of a self-learning device, press the learning button on the device and then the on button on the page to program the device.
+                </P>
+            </div>
+            <div id="addDialog" title="Add device" class="dialog">
+                <p>
+                    <form>
+                        <table>
+                            <tr>
+                                <td>
+                                    Name
+                                </td>
+                                <td>
+                                    <input type="text" id="name">
+                                    </input>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    Protocol
+                                </td>
+                                <td>
+                                    <select id="protocol">
+                                        <option>arctech</option>
+                                        <option>brateck</option>
+                                        <option>everflourish</option>
+                                        <option>ikea</option>
+                                        <option>risingsun</option>
+                                        <option>sartano</option>
+                                        <option>upm</option>
+                                        <option>waveman</option>
+                                        <option>x10</option>
+                                    </select>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    Model
+                                </td>
+                                <td>
+                                    <select id="model">
+                                        <option value="selflearning-switch">Selflearning on/off</option>
+                                        <option value="selflearning-dimmer">Selflearning dimmer</option>
+                                        <option value="bell">Bell</option>
+                                        <option value="codeswitch">Code switch</option>
+                                    </select>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    House
+                                </td>
+                                <td>
+                                    <input type="text" id="house-numeric">
+                                    </input>
+                                    <select id="house-alpha">
+                                        <option>A</option>
+                                        <option>B</option>
+                                        <option>C</option>
+                                        <option>D</option>
+                                        <option>E</option>
+                                        <option>F</option>
+                                        <option>G</option>
+                                        <option>H</option>
+                                        <option>I</option>
+                                        <option>J</option>
+                                        <option>K</option>
+                                        <option>L</option>
+                                        <option>M</option>
+                                        <option>N</option>
+                                        <option>O</option>
+                                        <option>P</option>
+                                    </select>
+                                </td>
+                            </tr>
+                            <tr id="unit">
+                                <td>
+                                    Unit
+                                </td>
+                                <td>
+                                    <input id="unitvalue" type="text">
+                                    </input>
+                                </td>
+                            </tr>
+                        </table>
+                    </form>
+                </p>
+            </div>
+            <div class="header ui-widget-header">
+                <div class="left">
+                    <div class="button" id="turnAllOff">
+                        All Off
+                    </div>
+                </div>
+                <div class="center">
+                    <div class="button" id="addDevice">
+                        Add
+                    </div>
+                </div>
+                <div class="right">
+                    <div class="button" id="turnAllOn">
+                        All On
+                    </div>
+                </div>
+                <div class="headerbottom">
+                </div>
+            </div>
+            <div id="devices" class="device-list">
+            </div>
+            <div class="links">
+                <a href="https://github.com/pakerfeldt/remotestick/wiki/REST-API">Api</a>
+                <a href="https://github.com/pakerfeldt/remotestick/wiki/REST-API:-Devices">Devices</a>
+                <a href="https://github.com/pakerfeldt/remotestick/wiki/REST-API:-Methods">Methods</a>
+				This UI is using JS-Analytics to capture errors, no personal information is collected.
+            </div>
+        </body>
+    </html>
